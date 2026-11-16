@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Hitung GW / NW</title>
+  <meta name="description" content="Hitung berat bruto dan netto per karton dari Detail Packing List (PDF), lalu unduh sebagai Excel.">
+  <meta name="theme-color" content="#1B2430">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <h1>Hitung GW / NW</h1>
+    <p>Bruto dan netto per karton, dihitung dari Detail Packing List.</p>
+  </header>
+
+  <main>
+    <section aria-labelledby="h-file">
+      <h2 id="h-file">Packing list</h2>
+      <label class="drop" id="drop" for="file">
+        <input type="file" id="file" accept="application/pdf,.pdf">
+        <span class="drop-main">Pilih file PDF</span>
+        <span class="drop-sub">atau seret ke sini. File dibaca di perangkat ini dan tidak diunggah ke mana pun.</span>
+      </label>
+      <p id="fileStatus" class="status" role="status" aria-live="polite"></p>
+      <details id="warnBox" class="warn" hidden>
+        <summary id="warnSummary"></summary>
+        <ul id="warnList"></ul>
+      </details>
+    </section>
+
+    <section aria-labelledby="h-param">
+      <h2 id="h-param">Berat kemasan</h2>
+      <div class="field wide">
+        <label for="preset">Preset</label>
+        <select id="preset"></select>
+      </div>
+      <p id="presetNote" class="note" hidden></p>
+      <div class="grid">
+        <div class="field"><label for="ppt">1 PPT, per roll (kg)</label><input id="ppt" type="number" inputmode="decimal" step="any" min="0"></div>
+        <div class="field"><label for="ctnAcc">Karton + aksesori (kg)</label><input id="ctnAcc" type="number" inputmode="decimal" step="any" min="0"></div>
+        <div class="field"><label for="yardCtn">Yard 1 karton contoh</label><input id="yardCtn" type="number" inputmode="decimal" step="any" min="0"></div>
+        <div class="field"><label for="beratCtn">Berat 1 karton contoh (kg)</label><input id="beratCtn" type="number" inputmode="decimal" step="any" min="0"></div>
+      </div>
+      <p class="formula">Bruto per yard <strong id="rate">-</strong> kg. Netto = bruto &minus; (roll &times; PPT + karton/aksesori).</p>
+      <p id="paramError" class="error" role="alert" hidden></p>
+      <div class="actions">
+        <button type="button" class="ghost" id="savePreset">Simpan sebagai preset saya</button>
+        <button type="button" class="ghost" id="deletePreset" hidden>Hapus preset ini</button>
+      </div>
+    </section>
+
+    <section aria-labelledby="h-doc">
+      <h2 id="h-doc">Keterangan di Excel</h2>
+      <div class="grid">
+        <div class="field"><label for="buyer">Buyer</label><input id="buyer" type="text" autocomplete="off" placeholder="mis. ACCURATE / 58"></div>
+        <div class="field"><label for="item">Artikel / keterangan</label><input id="item" type="text" autocomplete="off"></div>
+        <div class="field"><label for="formulir">No. formulir</label><input id="formulir" type="text" autocomplete="off"></div>
+      </div>
+    </section>
+
+    <section id="result" aria-labelledby="h-result" hidden>
+      <h2 id="h-result">Hasil</h2>
+      <div class="scale" aria-live="polite">
+        <div class="reading"><span class="reading-label">Bruto</span><span class="reading-value" id="totBruto">0,00</span><span class="reading-unit">kg</span></div>
+        <div class="reading"><span class="reading-label">Netto</span><span class="reading-value" id="totNetto">0,00</span><span class="reading-unit">kg</span></div>
+        <dl class="facts">
+          <div><dt>Karton</dt><dd id="totCartons">0</dd></div>
+          <div><dt>Roll</dt><dd id="totRolls">0</dd></div>
+          <div><dt>Yard</dt><dd id="totYards">0</dd></div>
+          <div><dt>Kemasan</dt><dd id="totTare">0,00 kg</dd></div>
+        </dl>
+      </div>
+
+      <div class="actions sticky">
+        <button type="button" class="primary" id="download">Unduh Excel</button>
+        <span id="downloadStatus" class="status" role="status" aria-live="polite"></span>
+      </div>
+
+      <div class="field wide">
+        <label for="search">Cari nomor karton atau desain</label>
+        <input id="search" type="search" autocomplete="off" placeholder="mis. 28 atau LCHSJ48">
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th scope="col">No. Ctn</th><th scope="col" class="design">Desain</th><th scope="col" class="num">Yard</th><th scope="col" class="num">Roll</th><th scope="col" class="num">Bruto</th><th scope="col" class="num">Netto</th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <p id="noMatch" class="note" hidden>Tidak ada karton yang cocok dengan pencarian.</p>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <p>Rumus mengikuti file BERAT BRUTO VS NETTO TEORI. Semua perhitungan berjalan di perangkat ini.</p>
+  </footer>
+
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>
