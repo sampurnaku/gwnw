@@ -1,5 +1,5 @@
 // Service worker: simpan semua file aplikasi agar bisa dipakai tanpa internet.
-const CACHE = 'gwnw-v1';
+const CACHE = 'gwnw-v2';
 const ASSETS = [
   './',
   'index.html',
