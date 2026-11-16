@@ -1,0 +1,2 @@
+# gwnw
+cara hitung gwnw
