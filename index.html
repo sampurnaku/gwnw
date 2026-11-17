@@ -5,15 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Hitung GW / NW</title>
   <meta name="description" content="Hitung berat bruto dan netto per karton dari Detail Packing List (PDF), lalu unduh sebagai Excel.">
-  <meta name="theme-color" content="#1B2430">
+  <meta name="theme-color" content="#0b0d1f">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <div class="bg" aria-hidden="true"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
   <header class="top">
-    <h1>Hitung GW / NW</h1>
+    <a class="home" href="/menuGit/" aria-label="Kembali ke Menu Utama"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>Menu Utama</a>
+    <h1><i class="ico"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.8"/><rect x="13" y="4" width="7" height="7" rx="1.8"/><rect x="4" y="13" width="7" height="7" rx="1.8"/><rect x="13" y="13" width="7" height="7" rx="1.8"/></svg></i><span class="ttl">Hitung GW / NW</span></h1>
     <p>Bruto dan netto per karton, dihitung dari Detail Packing List.</p>
   </header>
 
@@ -111,5 +113,6 @@
   </footer>
 
   <script type="module" src="src/app.js"></script>
+<script>for(let i=0;i<24;i++){const t=document.createElement('i');t.className='star';t.style.cssText='left:'+Math.random()*100+'%;top:'+Math.random()*100+'%;animation-delay:'+(Math.random()*4).toFixed(2)+'s;animation-duration:'+(3+Math.random()*3).toFixed(2)+'s';document.querySelector('.bg').appendChild(t)}</script>
 </body>
 </html>

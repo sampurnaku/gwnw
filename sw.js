@@ -1,6 +1,6 @@
 // Service worker: aplikasi tetap bisa dibuka tanpa internet, dan versi baru dari GitHub
 // otomatis terpakai begitu perangkat online (file aplikasi diambil dari jaringan lebih dulu).
-const CACHE = 'gwnw-v3';
+const CACHE = 'gwnw-v4';
 const ASSETS = [
   './',
   'index.html',
