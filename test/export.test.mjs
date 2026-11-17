@@ -9,6 +9,7 @@ import { extractLines, parsePackingList } from '../src/parser.js';
 import { calcAll, totals } from '../src/calc.js';
 import { findPreset, paramsOf } from '../src/presets.js';
 import { buildWorkbook } from '../src/export.js';
+import { summarizeSamples, effectiveParams } from '../src/samples.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -29,5 +30,21 @@ for (const [name, omitCache] of [['hasil.xlsx', false], ['hasil_nocache.xlsx', t
   const wb = buildWorkbook(ExcelJS, { results, params, preset: `${preset.group} - ${preset.name}`, meta, logo, omitCache });
   await wb.xlsx.writeFile(path.join(outDir, name));
 }
+
+// Versi dengan timbangan sampel (rata-rata berbobot menggantikan angka preset)
+const sampleInput = [
+  { no: 1, yards: 207, rolls: 8, bruto: 69.5, src: 'bruto' },
+  { no: 2, yards: 250, rolls: 10, netto: 76, src: 'netto' },
+  { no: 3, yards: 198, rolls: 8, bruto: 66, src: 'bruto' },
+];
+const summary = summarizeSamples(sampleInput, params);
+const effParams = effectiveParams(params, summary, true);
+const resultsS = calcAll(cartons, effParams);
+const validRows = summary.rows.filter((r) => r.valid);
+for (const [name, omitCache] of [['hasil_sampel.xlsx', false], ['hasil_sampel_nocache.xlsx', true]]) {
+  const wb = buildWorkbook(ExcelJS, { results: resultsS, params: effParams, preset: 'Rata-rata 3 sampel', meta, logo, samples: { enabled: true, rows: validRows }, omitCache });
+  await wb.xlsx.writeFile(path.join(outDir, name));
+}
+fs.writeFileSync(path.join(outDir, 'expected_sampel.json'), JSON.stringify({ results: resultsS, totals: totals(resultsS), rate: summary.rate }));
 fs.writeFileSync(path.join(outDir, 'expected.json'), JSON.stringify({ results, totals: totals(results) }));
 console.log('export.test OK ->', outDir, JSON.stringify(totals(results)));

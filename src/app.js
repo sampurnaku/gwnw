@@ -3,6 +3,8 @@ import { extractLines, parsePackingList } from './parser.js';
 import { calcAll, totals, brutoPerYard, validateParams } from './calc.js';
 import { PRESETS, DEFAULT_PRESET_ID, findPreset, paramsOf } from './presets.js';
 import { buildWorkbook } from './export.js';
+import { MAX_SAMPLES, emptySample, summarizeSamples, effectiveParams } from './samples.js';
+import { VERSION } from './version.js';
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL('../vendor/pdf.worker.min.mjs', import.meta.url).href;
 
@@ -11,6 +13,8 @@ const CUSTOM = 'custom';
 const $ = (id) => document.getElementById(id);
 const nf2 = new Intl.NumberFormat('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const nf0 = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 2 });
+const nf4 = new Intl.NumberFormat('id-ID', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+const nf1 = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 });
 
 const state = {
   fileName: '',
@@ -20,6 +24,11 @@ const state = {
   presetId: DEFAULT_PRESET_ID,
   customPresets: [],
   results: [],
+  samples: [],
+  useSamples: true,
+  summary: { rows: [], count: 0 },
+  effective: null,
+  usingSamples: false,
 };
 
 // ---------- Penyimpanan lokal ----------
@@ -37,6 +46,8 @@ function save() {
       params: readParams(),
       meta: readMeta(),
       customPresets: state.customPresets,
+      useSamples: state.useSamples,
+      samples: state.samples.map(({ no, yards, rolls, bruto, netto, src, auto }) => ({ no, yards, rolls, bruto, netto, src, auto })),
     }));
   } catch {
     /* penyimpanan penuh atau diblokir: abaikan */
@@ -119,11 +130,23 @@ function onParamInput() {
 // ---------- Perhitungan dan tampilan ----------
 function recalc() {
   const params = readParams();
-  const errors = validateParams(params);
-  for (const key of PARAM_FIELDS) $(key).classList.toggle('invalid', !(params[key] >= 0) || ((key === 'yardCtn' || key === 'beratCtn') && !(params[key] > 0)));
+  refreshSamples(params);
+  const eff = effectiveParams(params, state.summary, state.useSamples);
+  const usingSamples = eff !== params;
+  state.effective = eff;
+  state.usingSamples = usingSamples;
+
+  const errors = validateParams(eff);
+  for (const key of PARAM_FIELDS) {
+    const bad = !(params[key] >= 0) || ((key === 'yardCtn' || key === 'beratCtn') && !(params[key] > 0));
+    const ignored = usingSamples && (key === 'yardCtn' || key === 'beratCtn');
+    $(key).classList.toggle('invalid', bad && !ignored);
+  }
+  for (const key of ['yardCtn', 'beratCtn']) $(key).closest('.field').classList.toggle('overridden', usingSamples);
   $('paramError').hidden = errors.length === 0;
   $('paramError').textContent = errors.join(' ');
-  $('rate').textContent = errors.length ? '-' : brutoPerYard(params).toFixed(6).replace('.', ',');
+  $('rate').textContent = errors.length ? '-' : brutoPerYard(eff).toFixed(6).replace('.', ',');
+  $('rateSource').textContent = usingSamples ? ` (rata-rata ${state.summary.count} sampel timbangan, bukan angka preset)` : '';
   showPresetNote();
   save();
 
@@ -135,9 +158,138 @@ function recalc() {
     return;
   }
   $('download').disabled = false;
-  state.results = calcAll(state.cartons, params);
+  state.results = calcAll(state.cartons, eff);
   renderTotals();
   renderRows();
+}
+
+// ---------- Timbangan sampel ----------
+const escapeAttr = (v) => String(v ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
+
+function sampleField(id, f, label, value, step, mode) {
+  return `<div class="field"><label for="${id}-${f}">${label}</label><input id="${id}-${f}" data-f="${f}" type="number" inputmode="${mode}" step="${step}" min="0" value="${escapeAttr(value)}"${f === 'no' ? ' placeholder="boleh kosong"' : ''}></div>`;
+}
+
+function renderSamples() {
+  $('samples').innerHTML = state.samples.map((s, i) => {
+    const id = `s${i}`;
+    return `<div class="sample">
+      <div class="sample-head"><h3>Sampel ${i + 1}</h3><span class="sample-rate" data-rate></span><button type="button" class="link" data-remove aria-label="Hapus sampel ${i + 1}">Hapus</button></div>
+      <div class="sample-fields">
+        ${sampleField(id, 'no', 'No. karton', s.no, '1', 'numeric')}
+        ${sampleField(id, 'yards', 'Yard', s.yards, 'any', 'decimal')}
+        ${sampleField(id, 'rolls', 'Roll', s.rolls, '1', 'numeric')}
+        ${sampleField(id, 'bruto', 'Bruto (kg)', s.bruto, 'any', 'decimal')}
+        ${sampleField(id, 'netto', 'Netto (kg)', s.netto, 'any', 'decimal')}
+      </div>
+      <p class="sample-msg" data-msg></p>
+    </div>`;
+  }).join('');
+}
+
+/** Hitung ulang semua sampel; perbarui kolom turunan, rata-rata per baris, dan ringkasan. */
+function refreshSamples(params) {
+  const summary = summarizeSamples(state.samples, { ppt: params.ppt, ctnAcc: params.ctnAcc });
+  state.summary = summary;
+  const rows = $('samples').children;
+  summary.rows.forEach((r, i) => {
+    const el = rows[i];
+    if (!el) return;
+    const bruto = el.querySelector('[data-f="bruto"]');
+    const netto = el.querySelector('[data-f="netto"]');
+    const [source, derived, derivedValue] = r.src === 'netto' ? [netto, bruto, r.bruto] : [bruto, netto, r.netto];
+    source.classList.remove('derived');
+    derived.classList.add('derived');
+    derived.value = Number.isFinite(derivedValue) ? derivedValue : '';
+    el.querySelector('[data-rate]').textContent = r.valid ? `${nf4.format(r.rate)} kg/yard` : '';
+    const filled = ['no', 'yards', 'rolls', r.src].some((f) => state.samples[i][f] !== '');
+    el.querySelector('[data-msg]').textContent = state.samples[i].noMsg || (!r.valid && filled ? r.reason : '');
+  });
+
+  const box = $('sampleSummary');
+  if (!summary.count) {
+    box.className = 'sample-summary empty';
+    box.textContent = 'Belum ada sampel yang lengkap. Isi yard dan berat untuk minimal satu sampel.';
+    return;
+  }
+  const presetRate = params.yardCtn > 0 && params.beratCtn > 0 ? params.beratCtn / params.yardCtn : NaN;
+  let text = `Rata-rata ${nf4.format(summary.rate)} kg/yard dari ${summary.count} sampel`;
+  if (summary.count > 1) text += `, selisih antar sampel ${nf1.format(summary.spreadPct)}%`;
+  text += '.';
+  if (Number.isFinite(presetRate)) {
+    const diff = (summary.rate / presetRate - 1) * 100;
+    text += ` Angka preset ${nf4.format(presetRate)} kg/yard (${diff >= 0 ? '+' : ''}${nf1.format(diff)}%).`;
+  }
+  if (summary.count < 3) text += ' Disarankan 3 sampai 5 sampel.';
+  if (summary.count > 1 && summary.spreadPct > 3) text += ' Selisih antar sampel cukup besar, cek lagi timbangannya.';
+  box.className = 'sample-summary';
+  box.textContent = text;
+}
+
+function fillSampleFromPdf(sample, rowEl) {
+  const no = Number(sample.no);
+  const carton = sample.no === '' ? null : state.cartons.find((c) => c.no === no);
+  if (carton) {
+    sample.yards = carton.yards;
+    sample.rolls = carton.rolls;
+    sample.auto = true;
+    if (rowEl) {
+      rowEl.querySelector('[data-f="yards"]').value = carton.yards;
+      rowEl.querySelector('[data-f="rolls"]').value = carton.rolls;
+    }
+  } else if (sample.no !== '' && state.cartons.length) {
+    sample.noMsg = `Nomor ${sample.no} tidak ada di PDF. Isi yard dan roll sendiri.`;
+  }
+}
+
+function onSampleInput(e) {
+  const input = e.target.closest('input[data-f]');
+  if (!input) return;
+  const rowEl = input.closest('.sample');
+  const sample = state.samples[[...$('samples').children].indexOf(rowEl)];
+  const field = input.dataset.f;
+  sample[field] = input.value;
+  sample.noMsg = '';
+  if (field === 'bruto' || field === 'netto') sample.src = field;
+  if (field === 'yards' || field === 'rolls') sample.auto = false;
+  if (field === 'no') fillSampleFromPdf(sample, rowEl);
+  recalc();
+}
+
+function onSampleClick(e) {
+  const button = e.target.closest('[data-remove]');
+  if (!button) return;
+  const index = [...$('samples').children].indexOf(button.closest('.sample'));
+  state.samples.splice(index, 1);
+  if (!state.samples.length) state.samples.push(emptySample());
+  renderSamples();
+  recalc();
+}
+
+function addSample() {
+  if (state.samples.length >= MAX_SAMPLES) return;
+  state.samples.push(emptySample());
+  renderSamples();
+  recalc();
+  const last = $('samples').lastElementChild;
+  if (last) last.querySelector('[data-f="no"]').focus();
+}
+
+function clearSamples() {
+  if (state.samples.some((s) => s.yards !== '' || s.bruto !== '' || s.netto !== '') && !window.confirm('Kosongkan semua sampel?')) return;
+  state.samples = [emptySample(), emptySample(), emptySample()];
+  renderSamples();
+  recalc();
+}
+
+function cleanSamples(list) {
+  if (!Array.isArray(list)) return null;
+  const clean = list.slice(0, MAX_SAMPLES).map((s) => ({
+    ...emptySample(),
+    no: s.no ?? '', yards: s.yards ?? '', rolls: s.rolls ?? '', bruto: s.bruto ?? '', netto: s.netto ?? '',
+    src: s.src === 'netto' ? 'netto' : 'bruto', auto: Boolean(s.auto),
+  }));
+  return clean.length ? clean : null;
 }
 
 function renderTotals() {
@@ -197,7 +349,7 @@ async function handleFile(file) {
     const t = totals(parsed.cartons.map((c) => ({ ...c, bruto: 0, netto: 0 })));
     const allOk = parsed.warnings.length === 0;
     setStatus(
-      `${file.name}: ${nf0.format(t.cartons)} karton, ${nf0.format(t.rolls)} roll, ${nf0.format(t.yards)} yard${parsed.lbr ? `, lebar ${parsed.lbr}"` : ''}.${allOk ? ' Semua nomor cocok dengan total di PDF.' : ''}`,
+      `${file.name}: ${nf0.format(t.cartons)} karton, ${nf0.format(t.rolls)} roll, ${nf0.format(t.yards)} yard${parsed.lbr ? `, lebar ${parsed.lbr}"` : ''}.${allOk ? (parsed.grandOk ? ' Semua karton dan GRAND TOTAL cocok dengan PDF.' : ' Semua nomor cocok dengan total di PDF.') : ''}`,
       allOk ? 'ok' : '',
     );
     if (!allOk) {
@@ -205,6 +357,8 @@ async function handleFile(file) {
       $('warnList').innerHTML = parsed.warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join('');
       $('warnBox').hidden = false;
     }
+    for (const sample of state.samples) if (sample.no !== '' && (sample.yards === '' || sample.auto)) fillSampleFromPdf(sample, null);
+    renderSamples();
     $('search').value = '';
     $('result').hidden = false;
     recalc();
@@ -253,9 +407,10 @@ async function download() {
     if (!window.ExcelJS) await loadScript('vendor/exceljs.min.js');
     const wb = buildWorkbook(window.ExcelJS, {
       results: state.results,
-      params: readParams(),
-      preset: presetLabel(),
+      params: state.effective,
+      preset: state.usingSamples ? `Rata-rata ${state.summary.count} sampel timbangan (kemasan: ${presetLabel()})` : presetLabel(),
       meta: readMeta(),
+      samples: state.usingSamples ? { enabled: true, rows: state.summary.rows.filter((r) => r.valid) } : null,
       logo: await logoImage(),
     });
     const buffer = await wb.xlsx.writeBuffer();
@@ -319,6 +474,11 @@ function init() {
   $('buyer').value = meta.buyer || '';
   $('item').value = meta.item || '';
   $('formulir').value = meta.formulir ?? 'FMKA-IK-09-26-0';
+  state.samples = cleanSamples(saved.samples) || [emptySample(), emptySample(), emptySample()];
+  state.useSamples = saved.useSamples !== false;
+  $('useSamples').checked = state.useSamples;
+  $('version').textContent = `Versi ${VERSION}`;
+  renderSamples();
 
   $('preset').addEventListener('change', onPresetChange);
   for (const key of PARAM_FIELDS) $(key).addEventListener('input', onParamInput);
@@ -327,6 +487,11 @@ function init() {
   $('download').addEventListener('click', download);
   $('savePreset').addEventListener('click', savePreset);
   $('deletePreset').addEventListener('click', deletePreset);
+  $('samples').addEventListener('input', onSampleInput);
+  $('samples').addEventListener('click', onSampleClick);
+  $('addSample').addEventListener('click', addSample);
+  $('clearSamples').addEventListener('click', clearSamples);
+  $('useSamples').addEventListener('change', (e) => { state.useSamples = e.target.checked; recalc(); });
 
   const drop = $('drop');
   $('file').addEventListener('change', (e) => handleFile(e.target.files[0]));

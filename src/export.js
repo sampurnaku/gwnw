@@ -10,6 +10,7 @@ import { brutoPerYard, totals } from './calc.js';
 export const ROWS_PER_PAGE = 55;
 const FIRST_DATA_ROW = 15; // baris pertama data di sheet HASIL TIMBANGAN
 const CALC_FIRST_ROW = 12; // baris pertama data di sheet PERHITUNGAN
+const SAMPLE_FIRST_ROW = 5; // baris pertama data di sheet SAMPEL
 const ORANGE = 'FFE1871D';
 const BLACK = 'FF000000';
 const FMT = '#,##0.00';
@@ -30,8 +31,11 @@ function formula(text, result, omitCache) {
  *   preset  : nama preset (teks)
  *   meta    : { buyer, item, formulir }
  *   logo    : opsional, objek untuk workbook.addImage ({ base64, extension } atau { buffer, extension })
+ *   samples : opsional, { enabled, rows } - timbangan sampel yang dipakai sebagai bruto per yard.
+ *             rows = hasil summarizeSamples().rows yang valid (no, yards, rolls, bruto, netto, src, tare, rate)
+ *             Bila diisi, params.yardCtn / params.beratCtn adalah jumlah yard / jumlah bruto sampel.
  */
-export function buildWorkbook(ExcelJS, { results, params, preset = '', meta = {}, logo = null, omitCache = false }) {
+export function buildWorkbook(ExcelJS, { results, params, preset = '', meta = {}, logo = null, samples = null, omitCache = false }) {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Hitung GW/NW';
   wb.created = new Date();
@@ -42,8 +46,11 @@ export function buildWorkbook(ExcelJS, { results, params, preset = '', meta = {}
   const lastData = FIRST_DATA_ROW + results.length - 1;
   const lastCalc = CALC_FIRST_ROW + results.length - 1;
 
-  buildCalcSheet(calc, { results, params, preset, sum, omitCache, lastCalc });
+  const useSamples = Boolean(samples && samples.enabled && samples.rows && samples.rows.length);
+  const sampleTotalRow = useSamples ? SAMPLE_FIRST_ROW + samples.rows.length : null;
+  buildCalcSheet(calc, { results, params, preset, sum, omitCache, lastCalc, sampleTotalRow });
   buildLahanSheet(wb, lahan, { results, meta, logo, sum, omitCache, lastData });
+  if (useSamples) buildSampleSheet(wb.addWorksheet('SAMPEL'), { rows: samples.rows, params, omitCache });
   return wb;
 }
 
@@ -155,7 +162,7 @@ function buildLahanSheet(wb, ws, { results, meta, logo, sum, omitCache, lastData
   };
 }
 
-function buildCalcSheet(ws, { results, params, preset, sum, omitCache, lastCalc }) {
+function buildCalcSheet(ws, { results, params, preset, sum, omitCache, lastCalc, sampleTotalRow }) {
   ws.columns = [
     { width: 3 }, { width: 28 }, { width: 26 }, { width: 11 }, { width: 8 },
     { width: 13 }, { width: 13 }, { width: 13 }, { width: 70 },
@@ -184,6 +191,19 @@ function buildCalcSheet(ws, { results, params, preset, sum, omitCache, lastCalc 
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
   });
   ws.mergeCells('C4:E4');
+  if (sampleTotalRow) {
+    // Bruto per yard berasal dari rata-rata timbangan sampel (sheet SAMPEL), bukan angka preset.
+    ws.getCell('B7').value = 'Jumlah yard sampel';
+    ws.getCell('B8').value = 'Jumlah bruto sampel (kg)';
+    ws.getCell('C7').value = formula(`SAMPEL!C${sampleTotalRow}`, params.yardCtn, omitCache);
+    ws.getCell('C8').value = formula(`SAMPEL!E${sampleTotalRow}`, params.beratCtn, omitCache);
+    for (const ref of ['C7', 'C8']) {
+      ws.getCell(ref).fill = { type: 'pattern', pattern: 'none' };
+      ws.getCell(ref).font = { name: 'Calibri', size: 11, color: { argb: 'FF000000' } };
+    }
+    ws.getCell('F7').value = 'Diambil dari sheet SAMPEL. Ubah angka sampel di sana.';
+    ws.getCell('F7').font = { name: 'Calibri', size: 10, italic: true, color: { argb: 'FF595959' } };
+  }
   ws.getCell('B9').value = 'Bruto per yard (kg / yd)';
   ws.getCell('C9').value = formula('C8/C7', brutoPerYard(params), omitCache);
   ws.getCell('C9').numFmt = '0.000000';
@@ -242,4 +262,76 @@ function buildCalcSheet(ws, { results, params, preset, sum, omitCache, lastCalc 
     fitToHeight: 0,
     printTitlesRow: `${CALC_FIRST_ROW - 1}:${CALC_FIRST_ROW - 1}`,
   };
+}
+
+/** Sheet SAMPEL: timbangan 3 sampai 5 karton; total dan rata-ratanya mengisi sheet PERHITUNGAN. */
+function buildSampleSheet(ws, { rows, params, omitCache }) {
+  ws.columns = [{ width: 3 }, { width: 14 }, { width: 11 }, { width: 8 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 20 }];
+  ws.getCell('B1').value = 'Timbangan sampel';
+  ws.getCell('B1').font = { name: 'Calibri', size: 16, bold: true };
+  ws.getCell('B2').value = 'Sel kuning = hasil timbang / isian. Bruto per yard rata-rata (jumlah bruto / jumlah yard) dipakai di sheet PERHITUNGAN.';
+  ws.getCell('B2').font = { name: 'Calibri', size: 10, italic: true, color: { argb: 'FF595959' } };
+
+  ['No. Ctn', 'Yard', 'Roll', 'Bruto (kg)', 'Tare (kg)', 'Netto (kg)', 'Bruto per yard (kg)'].forEach((text, i) => {
+    const cell = ws.getCell(SAMPLE_FIRST_ROW - 1, 2 + i);
+    cell.value = text;
+    cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF404040' } };
+    cell.alignment = { horizontal: i === 0 ? 'left' : 'right', vertical: 'middle' };
+  });
+
+  const input = (cell) => {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
+    cell.font = { name: 'Calibri', size: 11, color: { argb: 'FF0000FF' } };
+    cell.border = box('thin');
+  };
+  let sumRolls = 0;
+  rows.forEach((r, i) => {
+    const row = SAMPLE_FIRST_ROW + i;
+    const yards = Number(r.yards);
+    const rolls = r.rolls === '' || r.rolls === null || r.rolls === undefined ? null : Number(r.rolls);
+    if (rolls !== null) sumRolls += rolls;
+    ws.getCell(`B${row}`).value = r.no === '' || r.no === null || r.no === undefined ? '-' : Number(r.no);
+    ws.getCell(`B${row}`).alignment = { horizontal: 'left' };
+    ws.getCell(`C${row}`).value = yards;
+    input(ws.getCell(`C${row}`));
+    if (rolls !== null) {
+      ws.getCell(`D${row}`).value = rolls;
+      ws.getCell(`F${row}`).value = formula(`D${row}*PERHITUNGAN!$C$5+PERHITUNGAN!$C$6`, rolls * params.ppt + params.ctnAcc, omitCache);
+    } else {
+      ws.getCell(`D${row}`).value = null;
+    }
+    input(ws.getCell(`D${row}`));
+    if (r.src === 'netto') {
+      ws.getCell(`G${row}`).value = r.netto;
+      input(ws.getCell(`G${row}`));
+      ws.getCell(`E${row}`).value = formula(`ROUND(G${row}+F${row},2)`, r.bruto, omitCache);
+    } else {
+      ws.getCell(`E${row}`).value = r.bruto;
+      input(ws.getCell(`E${row}`));
+      if (rolls !== null) ws.getCell(`G${row}`).value = formula(`ROUND(E${row}-F${row},2)`, r.netto, omitCache);
+    }
+    ws.getCell(`H${row}`).value = formula(`E${row}/C${row}`, r.rate, omitCache);
+    ws.getCell(`H${row}`).numFmt = '0.0000';
+    for (const col of ['C', 'E', 'F', 'G']) ws.getCell(`${col}${row}`).numFmt = FMT;
+  });
+
+  const total = SAMPLE_FIRST_ROW + rows.length;
+  const first = SAMPLE_FIRST_ROW;
+  const last = total - 1;
+  ws.getCell(`B${total}`).value = 'TOTAL';
+  ws.getCell(`C${total}`).value = formula(`SUM(C${first}:C${last})`, params.yardCtn, omitCache);
+  ws.getCell(`D${total}`).value = formula(`SUM(D${first}:D${last})`, sumRolls, omitCache);
+  ws.getCell(`E${total}`).value = formula(`SUM(E${first}:E${last})`, params.beratCtn, omitCache);
+  ws.getCell(`H${total}`).value = formula(`E${total}/C${total}`, params.beratCtn / params.yardCtn, omitCache);
+  ws.getCell(`H${total}`).numFmt = '0.000000';
+  ws.getCell(`C${total}`).numFmt = FMT;
+  ws.getCell(`E${total}`).numFmt = FMT;
+  for (const col of ['B', 'C', 'D', 'E', 'F', 'G', 'H']) {
+    ws.getCell(`${col}${total}`).font = { name: 'Calibri', size: 11, bold: true };
+    ws.getCell(`${col}${total}`).border = { top: side('thin'), bottom: side('double') };
+  }
+  ws.getCell(`B${total + 2}`).value = 'Rata-rata bruto per yard (kolom H pada baris TOTAL) dipakai untuk menghitung semua karton.';
+  ws.getCell(`B${total + 2}`).font = { name: 'Calibri', size: 10, italic: true, color: { argb: 'FF595959' } };
+  ws.pageSetup = { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
 }

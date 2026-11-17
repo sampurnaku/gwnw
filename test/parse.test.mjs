@@ -20,6 +20,8 @@ assert.deepEqual(result.warnings, [], 'tidak ada peringatan');
 assert.ok(result.cartons.every((c) => c.ok), 'semua karton cocok dengan total PDF');
 assert.equal(result.cartons.reduce((a, c) => a + c.yards, 0), 58957, 'total yard');
 assert.equal(result.cartons.reduce((a, c) => a + c.rolls, 0), 2313, 'total roll');
+assert.deepEqual(result.grand, { yards: 58957, rolls: 2313 }, 'GRAND TOTAL terbaca');
+assert.equal(result.grandOk, true, 'cocok dengan GRAND TOTAL');
 
 const byNo = Object.fromEntries(result.cartons.map((c) => [c.no, c]));
 assert.deepEqual([byNo[1].yards, byNo[1].rolls], [207, 8]);

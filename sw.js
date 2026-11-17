@@ -1,5 +1,6 @@
-// Service worker: simpan semua file aplikasi agar bisa dipakai tanpa internet.
-const CACHE = 'gwnw-v2';
+// Service worker: aplikasi tetap bisa dibuka tanpa internet, dan versi baru dari GitHub
+// otomatis terpakai begitu perangkat online (file aplikasi diambil dari jaringan lebih dulu).
+const CACHE = 'gwnw-v3';
 const ASSETS = [
   './',
   'index.html',
@@ -10,6 +11,8 @@ const ASSETS = [
   'src/parser.js',
   'src/presets.js',
   'src/export.js',
+  'src/samples.js',
+  'src/version.js',
   'vendor/pdf.min.mjs',
   'vendor/pdf.worker.min.mjs',
   'vendor/exceljs.min.js',
@@ -17,6 +20,8 @@ const ASSETS = [
   'icons/icon-192.png',
   'icons/icon-512.png',
 ];
+// Pustaka besar dan gambar jarang berubah: langsung dari cache.
+const CACHE_FIRST = /\/(vendor|icons|assets)\//;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
@@ -30,16 +35,30 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+async function store(request, response) {
+  if (response && response.ok) {
+    const cache = await caches.open(CACHE);
+    await cache.put(request, response.clone());
+  }
+  return response;
+}
+
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;
+  const url = new URL(request.url);
+
+  if (CACHE_FIRST.test(url.pathname)) {
+    event.respondWith(
+      caches.match(request, { ignoreSearch: true }).then((hit) => hit || fetch(request).then((res) => store(request, res))),
+    );
+    return;
+  }
+
+  // File aplikasi: jaringan lebih dulu (selalu cek versi terbaru), cache bila offline.
   event.respondWith(
-    caches.match(request, { ignoreSearch: true }).then((hit) => hit || fetch(request).then((res) => {
-      if (res.ok) {
-        const copy = res.clone();
-        caches.open(CACHE).then((cache) => cache.put(request, copy));
-      }
-      return res;
-    })),
+    fetch(request, { cache: 'no-cache' })
+      .then((res) => store(request, res))
+      .catch(() => caches.match(request, { ignoreSearch: true }).then((hit) => hit || caches.match('index.html'))),
   );
 });

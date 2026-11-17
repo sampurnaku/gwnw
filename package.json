@@ -1,12 +1,12 @@
 {
   "name": "gwnw-app",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Hitung berat bruto dan netto per karton dari Detail Packing List (PDF).",
   "type": "module",
   "private": true,
   "scripts": {
     "start": "python3 -m http.server 8080",
-    "test": "node test/calc.test.mjs && node test/parse.test.mjs && node test/export.test.mjs"
+    "test": "node test/calc.test.mjs && node test/samples.test.mjs && node test/parse.test.mjs && node test/parse2.test.mjs && node test/export.test.mjs"
   },
   "devDependencies": {
     "exceljs": "^4.4.0",

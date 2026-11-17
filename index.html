@@ -5,17 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Hitung GW / NW</title>
   <meta name="description" content="Hitung berat bruto dan netto per karton dari Detail Packing List (PDF), lalu unduh sebagai Excel.">
-  <meta name="theme-color" content="#0b0d1f">
+  <meta name="theme-color" content="#1B2430">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="bg" aria-hidden="true"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
   <header class="top">
-    <a class="home" href="/menuGit/" aria-label="Kembali ke Menu Utama"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>Menu Utama</a>
-    <h1><i class="ico"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.8"/><rect x="13" y="4" width="7" height="7" rx="1.8"/><rect x="4" y="13" width="7" height="7" rx="1.8"/><rect x="13" y="13" width="7" height="7" rx="1.8"/></svg></i><span class="ttl">Hitung GW / NW</span></h1>
+    <h1>Hitung GW / NW</h1>
     <p>Bruto dan netto per karton, dihitung dari Detail Packing List.</p>
   </header>
 
@@ -47,11 +45,23 @@
         <div class="field"><label for="yardCtn">Yard 1 karton contoh</label><input id="yardCtn" type="number" inputmode="decimal" step="any" min="0"></div>
         <div class="field"><label for="beratCtn">Berat 1 karton contoh (kg)</label><input id="beratCtn" type="number" inputmode="decimal" step="any" min="0"></div>
       </div>
-      <p class="formula">Bruto per yard <strong id="rate">-</strong> kg. Netto = bruto &minus; (roll &times; PPT + karton/aksesori).</p>
+      <p class="formula">Bruto per yard <strong id="rate">-</strong> kg<span id="rateSource"></span>. Netto = bruto &minus; (roll &times; PPT + karton/aksesori).</p>
       <p id="paramError" class="error" role="alert" hidden></p>
       <div class="actions">
         <button type="button" class="ghost" id="savePreset">Simpan sebagai preset saya</button>
         <button type="button" class="ghost" id="deletePreset" hidden>Hapus preset ini</button>
+      </div>
+    </section>
+
+    <section aria-labelledby="h-sample">
+      <h2 id="h-sample">Timbangan sampel</h2>
+      <p class="note lead">Timbang 3 sampai 5 karton dulu, lalu isi hasilnya di sini. Aplikasi mengambil rata-rata berat aktual per yard dan memakainya untuk semua karton, menggantikan angka preset. Isi bruto (hasil timbang karton utuh) atau netto; yang lain dihitung dari berat kemasan di atas.</p>
+      <div id="samples"></div>
+      <p id="sampleSummary" class="sample-summary" role="status" aria-live="polite"></p>
+      <label class="check" for="useSamples"><input type="checkbox" id="useSamples"> <span>Pakai rata-rata ini untuk semua karton</span></label>
+      <div class="actions">
+        <button type="button" class="ghost" id="addSample">Tambah sampel</button>
+        <button type="button" class="ghost" id="clearSamples">Kosongkan sampel</button>
       </div>
     </section>
 
@@ -97,10 +107,9 @@
   </main>
 
   <footer class="foot">
-    <p>Rumus mengikuti file BERAT BRUTO VS NETTO TEORI. Semua perhitungan berjalan di perangkat ini.</p>
+    <p>Rumus mengikuti file BERAT BRUTO VS NETTO TEORI. Semua perhitungan berjalan di perangkat ini. <span id="version"></span></p>
   </footer>
 
   <script type="module" src="src/app.js"></script>
-<script>for(let i=0;i<24;i++){const t=document.createElement('i');t.className='star';t.style.cssText='left:'+Math.random()*100+'%;top:'+Math.random()*100+'%;animation-delay:'+(Math.random()*4).toFixed(2)+'s;animation-duration:'+(3+Math.random()*3).toFixed(2)+'s';document.querySelector('.bg').appendChild(t)}</script>
 </body>
 </html>
